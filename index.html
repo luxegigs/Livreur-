@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Livreur Pro: Final Edition</title>
+    
+    <meta name="theme-color" content="#4f46e5">
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkxpdnJldXIgUHJvIiwKICAic2hvcnRfbmFtZSI6ICJMaXZyZXVyUHJvIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiM0ZjQ2ZTUiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL2Nkbi1pY29ucy1wbmcuZmxhdGljb24uY29tLzUxMi8yOTcyLzI5NzIxODUucG5nIiwKICAgICAgInNpemVzIjogIjUxMng1MTIiLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciCiAgICB9CiAgXQp9">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+        body { font-family: 'Tajawal', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-logo { animation: bounceIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards; }
+
+        #lock-screen { position: fixed; inset: 0; background: #4f46e5; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .pin-input { background: rgba(255,255,255,0.1); border: 3px solid #fbbf24; color: white; text-align: center; font-size: 2.5rem; width: 160px; border-radius: 1.5rem; padding: 10px; outline: none; margin-bottom: 20px; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .active-filter { background: #4f46e5 !important; color: white !important; }
+        #editModal, #scanModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px); }
+        .modal-content { background: white; width: 100%; max-width: 400px; padding: 25px; border-radius: 2rem; border-top: 10px solid #4f46e5; }
+        #video-preview { width: 100%; border-radius: 1.5rem; background: black; display: none; margin-bottom: 15px; }
+        .edit-badge { background: #f1f5f9; color: #64748b; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; display: flex; align-items: center; gap: 5px; border: 1px solid #e2e8f0; width: fit-content; margin-top: 5px; cursor: pointer; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-40 text-right">
+
+    <div id="lock-screen">
+        <div class="animate-logo bg-amber-400 w-24 h-24 rounded-[2rem] flex items-center justify-center shadow-2xl mb-6">
+            <i class="fa-solid fa-bolt text-indigo-900 text-5xl"></i>
+        </div>
+        <h2 class="text-white font-black text-2xl mb-8 italic uppercase tracking-tighter text-center">Livreur Pro<br><span class="text-sm font-bold opacity-70">Smart for Smarter</span></h2>
+        <input type="password" id="pinCode" class="pin-input" maxlength="4" placeholder="****" inputmode="numeric">
+        <button onclick="checkPin()" class="bg-amber-400 text-indigo-900 px-12 py-4 rounded-2xl font-black shadow-xl">دخول</button>
+    </div>
+
+    <div id="editModal">
+        <div class="modal-content shadow-2xl">
+            <h3 class="text-xl font-black text-indigo-700 mb-4 uppercase">تعديل البيانات</h3>
+            <div class="space-y-4">
+                <textarea id="editContent" class="w-full bg-slate-50 border rounded-xl p-3 text-sm min-h-[100px] outline-none"></textarea>
+                <div class="grid grid-cols-2 gap-3">
+                    <input type="number" id="editPrice" placeholder="الثمن" class="w-full bg-slate-50 border rounded-xl p-3 text-sm font-bold text-indigo-600">
+                    <input type="number" id="editDelivery" placeholder="التوصيل" class="w-full bg-slate-50 border rounded-xl p-3 text-sm font-bold text-emerald-600">
+                </div>
+                <input type="text" id="editPhone" placeholder="الهاتف" class="w-full bg-slate-50 border rounded-xl p-3 text-sm">
+            </div>
+            <div class="flex gap-2 mt-6">
+                <button onclick="saveEdit()" class="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg">حفظ التغيير</button>
+                <button onclick="closeModal()" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-xl font-bold">رجوع</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-content" class="hidden">
+        <header class="bg-indigo-700 text-white p-6 rounded-b-[2.5rem] shadow-xl sticky top-0 z-50">
+            <div class="flex justify-between items-center mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 bg-amber-400 rounded-2xl flex items-center justify-center shadow-lg"><i class="fa-solid fa-bolt text-indigo-900 text-xl"></i></div>
+                    <div><h1 class="text-xl font-black italic tracking-tighter leading-none uppercase">Livreur Pro</h1><p class="text-[10px] text-amber-300 font-bold mt-1 uppercase">Smart for Smarter</p></div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="exportToExcel()" class="bg-emerald-500 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg text-white border border-emerald-400"><i class="fa-solid fa-file-excel"></i></button>
+                    <button onclick="location.reload()" class="bg-white/10 w-10 h-10 rounded-xl flex items-center justify-center border border-white/10"><i class="fa-solid fa-lock text-xs"></i></button>
+                    <button onclick="clearAllData()" class="bg-rose-500/20 w-10 h-10 rounded-xl text-rose-100 flex items-center justify-center"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-3 mb-4 text-center">
+                <div class="bg-white/10 p-3 rounded-2xl"><span class="block text-[9px] opacity-70 font-bold uppercase">الطلبات</span><span id="stat-total" class="text-xl font-black">0</span></div>
+                <div class="bg-emerald-500/30 p-3 rounded-2xl"><span class="block text-[9px] opacity-70 font-bold uppercase">أرباحك</span><span id="stat-delivery-fees" class="text-xl font-black text-emerald-200">0</span></div>
+                <div class="bg-amber-500/20 p-3 rounded-2xl"><span class="block text-[9px] opacity-70 font-bold text-amber-200 uppercase">كاش</span><span id="stat-cash" class="text-xl font-black">0</span></div>
+            </div>
+        </header>
+
+        <main class="max-w-md mx-auto px-4 mt-6">
+            <div class="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 mb-6">
+                <div class="flex justify-between items-center mb-3 px-2">
+                    <span class="text-[11px] font-black text-slate-400 uppercase tracking-widest italic">Management</span>
+                    <button onclick="openScan()" class="text-indigo-600 flex items-center gap-1 text-[11px] font-black bg-indigo-50 px-3 py-1 rounded-full active:scale-95 transition">
+                        <i class="fa-solid fa-camera"></i> SCAN / UPLOAD
+                    </button>
+                </div>
+                <textarea id="raw-input" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-indigo-500 mb-4 min-h-[100px] text-right outline-none" placeholder="دخل الطلبية هنا أو استعمل السكاني..."></textarea>
+                <button onclick="processInput()" class="w-full bg-indigo-700 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition">تجهيز الطلبيات</button>
+            </div>
+
+            <div id="filter-bar" class="flex gap-2 overflow-x-auto no-scrollbar py-2 mb-6"></div>
+            
+            <button onclick="optimizeMyRoute()" class="w-full bg-orange-500 text-white py-4 rounded-2xl font-bold shadow-lg mb-8 flex items-center justify-center gap-3 active:scale-95 transition">
+                <i class="fa-solid fa-map-location-dot"></i> تتبع مسار الحي (GPS)
+            </button>
+
+            <div id="orders-container" class="space-y-4"></div>
+        </main>
+    </div>
+
+    <div id="scanModal">
+        <div class="modal-content shadow-2xl text-center">
+            <h3 class="text-lg font-black text-indigo-700 mb-4 uppercase">Scanner Ticket</h3>
+            <div id="scan-loading" class="hidden text-indigo-600 py-6">
+                <i class="fa-solid fa-atom fa-spin text-3xl mb-2"></i>
+                <div class="text-xs font-bold">جاري القراءة...</div>
+            </div>
+            <div id="scan-ui" class="space-y-3">
+                <video id="video-preview" autoplay playsinline></video>
+                <canvas id="capture-canvas" class="hidden"></canvas>
+                <button onclick="startCamera()" id="start-cam-btn" class="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold">افتح الكاميرا</button>
+                <button onclick="takePhoto()" id="capture-btn" class="hidden w-full bg-indigo-600 text-white py-4 rounded-xl font-bold">صور التيكيت</button>
+                <label class="w-full bg-emerald-500 text-white py-4 rounded-xl font-bold text-center cursor-pointer block">تحميل صورة<input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(event)"></label>
+            </div>
+            <button onclick="closeScan()" class="w-full mt-4 text-slate-400 font-bold text-[10px] uppercase">إغلاق</button>
+        </div>
+    </div>
+
+    <script>
+        const MASTER_PIN = "2026";
+        let orders = JSON.parse(localStorage.getItem('livreur_v6_pro_final')) || [];
+        let currentFilter = 'الكل';
+        let editingId = null;
+        let videoStream = null;
+
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                self.addEventListener('install', e => self.skipWaiting());
+                self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
+            `;
+            const blob = new Blob([swCode], {type: 'application/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(blob));
+        }
+
+        document.getElementById('pinCode').addEventListener('keypress', (e) => { if (e.key === 'Enter') checkPin(); });
+
+        function checkPin() {
+            if(document.getElementById('pinCode').value === MASTER_PIN) {
+                document.getElementById('lock-screen').style.display = 'none';
+                document.getElementById('app-content').classList.remove('hidden');
+                render();
+            } else { alert("الكود غلط أ مْعلم!"); document.getElementById('pinCode').value = ""; }
+        }
+
+        function exportToExcel() {
+            if (orders.length === 0) return alert("الائحة خاوية!");
+            const data = orders.map(o => ({
+                "الحي": o.neighborhood,
+                "التفاصيل": o.content,
+                "الهاتف": o.phone,
+                "الثمن": o.totalPrice,
+                "الربح": o.deliveryFee,
+                "الحالة": o.status === 'done' ? "وصلات" : "باقي"
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Service_Report");
+            XLSX.writeFile(wb, `Rapport_${new Date().toLocaleDateString()}.xlsx`);
+        }
+
+        function updateDB() { localStorage.setItem('livreur_v6_pro_final', JSON.stringify(orders)); render(); }
+
+        function optimizeMyRoute() {
+            const active = orders.filter(o => (currentFilter === 'الكل' ? true : o.neighborhood === currentFilter) && o.status === 'pending');
+            if (!active.length) return alert("لا توجد طلبيات!");
+            const locations = active.map(o => encodeURIComponent(o.content.substring(0,40)));
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${locations[locations.length-1]}&waypoints=${locations.slice(0,-1).join('|')}&travelmode=driving`, '_blank');
+        }
+
+        function sendPredefinedMessage(phone, neighborhood) {
+            const msg = `السلام عليكم، معاك الليفرور، أنا فلطريق عندك لـ ${neighborhood}، واش نتا موجود؟`;
+            window.open(`https://wa.me/212${phone.substring(1)}?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+
+        function render() {
+            const container = document.getElementById('orders-container');
+            document.getElementById('stat-total').innerText = orders.length;
+            document.getElementById('stat-cash').innerText = orders.filter(o => o.status === 'done').reduce((s, o) => s + o.totalPrice, 0) + ' DH';
+            document.getElementById('stat-delivery-fees').innerText = orders.filter(o => o.status === 'done').reduce((s, o) => s + o.deliveryFee, 0) + ' DH';
+            
+            const areas = ["الكل", ...new Set(orders.map(o => o.neighborhood))];
+            document.getElementById('filter-bar').innerHTML = areas.map(a => `<button onclick="currentFilter='${a}';render()" class="px-5 py-2 rounded-full text-[10px] font-black border transition ${currentFilter === a ? 'active-filter' : 'bg-white text-slate-400'}">${a}</button>`).join('');
+            
+            container.innerHTML = orders.filter(o => currentFilter === 'الكل' ? true : o.neighborhood === currentFilter).map(o => `
+                <div class="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 mb-4 ${o.status === 'done' ? 'opacity-50 grayscale' : 'border-r-8 border-r-indigo-600'}">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-[9px] font-black text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full uppercase">${o.neighborhood}</span>
+                            <div onclick="openEdit(${o.id})" class="edit-badge"><i class="fa-solid fa-pen"></i>تعديل</div>
+                        </div>
+                        <span class="text-xl font-black text-slate-800">${o.totalPrice} DH</span>
+                    </div>
+                    <p class="text-[12px] text-slate-600 mb-5 font-medium leading-relaxed">${o.content}</p>
+                    <div class="flex gap-2">
+                        <a href="tel:${o.phone}" class="bg-slate-50 p-4 rounded-2xl flex-1 text-center border border-slate-100"><i class="fa-solid fa-phone text-slate-400"></i></a>
+                        <button onclick="sendPredefinedMessage('${o.phone}', '${o.neighborhood}')" class="bg-indigo-50 p-4 rounded-2xl flex-1 text-center text-indigo-600 border border-indigo-100"><i class="fa-solid fa-comment-dots text-xl"></i></button>
+                        <a href="https://wa.me/212${o.phone.substring(1)}" class="bg-emerald-500 p-4 rounded-2xl flex-1 text-center text-white"><i class="fa-brands fa-whatsapp text-xl"></i></a>
+                        <button onclick="toggleStatus(${o.id})" class="flex-[2] ${o.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-700 text-white shadow-lg'} py-4 rounded-2xl font-black text-xs">${o.status === 'done' ? 'تم ✓' : 'توصيل'}</button>
+                        <button onclick="deleteOrder(${o.id})" class="bg-rose-50 text-rose-400 p-4 rounded-2xl flex-1 text-center"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </div>`).join('');
+        }
+
+        function openEdit(id) {
+            editingId = id; const o = orders.find(x => x.id === id);
+            document.getElementById('editContent').value = o.content;
+            document.getElementById('editPrice').value = o.totalPrice;
+            document.getElementById('editDelivery').value = o.deliveryFee;
+            document.getElementById('editPhone').value = o.phone;
+            document.getElementById('editModal').style.display = 'flex';
+        }
+        function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+        function saveEdit() {
+            orders = orders.map(o => o.id === editingId ? { ...o, content: document.getElementById('editContent').value, totalPrice: parseInt(document.getElementById('editPrice').value), deliveryFee: parseInt(document.getElementById('editDelivery').value), phone: document.getElementById('editPhone').value } : o);
+            updateDB(); closeModal();
+        }
+        function toggleStatus(id) { orders = orders.map(o => o.id === id ? { ...o, status: o.status === 'done' ? 'pending' : 'done' } : o); updateDB(); }
+        function deleteOrder(id) { if(confirm('تمسح الطلبية؟')) { orders = orders.filter(o => o.id !== id); updateDB(); } }
+        function clearAllData() { if(confirm('تمسح كلشي؟')) { orders = []; updateDB(); } }
+
+        function openScan() { document.getElementById('scanModal').style.display = 'flex'; resetScanUI(); }
+        function resetScanUI() {
+            document.getElementById('scan-ui').style.display = 'block';
+            document.getElementById('scan-loading').classList.add('hidden');
+            document.getElementById('video-preview').style.display = 'none';
+            document.getElementById('capture-btn').classList.add('hidden');
+            document.getElementById('start-cam-btn').classList.remove('hidden');
+        }
+        function closeScan() { if (videoStream) videoStream.getTracks().forEach(t => t.stop()); document.getElementById('scanModal').style.display = 'none'; }
+        async function startCamera() {
+            try {
+                const video = document.getElementById('video-preview');
+                video.style.display = 'block';
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = videoStream;
+                document.getElementById('capture-btn').classList.remove('hidden');
+                document.getElementById('start-cam-btn').classList.add('hidden');
+            } catch (err) { alert("مشكل في الكاميرا!"); }
+        }
+        async function handleImageUpload(event) { const file = event.target.files[0]; if (file) performOCR(file); }
+        async function takePhoto() {
+            const video = document.getElementById('video-preview');
+            const canvas = document.getElementById('capture-canvas');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            canvas.toBlob(blob => performOCR(blob));
+        }
+        async function performOCR(source) {
+            document.getElementById('scan-ui').style.display = 'none';
+            document.getElementById('scan-loading').classList.remove('hidden');
+            const worker = await Tesseract.createWorker();
+            await worker.loadLanguage('ara+eng');
+            await worker.initialize('ara+eng');
+            const { data: { text } } = await worker.recognize(source);
+            document.getElementById('raw-input').value += "\n" + text;
+            await worker.terminate();
+            closeScan();
+        }
+        function processInput() {
+            const text = document.getElementById('raw-input').value;
+            if (!text.trim()) return;
+            const entries = text.split(/(?=الطلب|Order|#|ID)/gi).filter(e => e.trim().length > 5);
+            entries.forEach((entry) => {
+                const phone = entry.match(/(06|07|05)\d{8}/)?.[0] || '0600000000';
+                const priceMatch = entry.match(/(\d+)\s*(dh|درهم|DH)/i);
+                let neighborhood = "أخرى";
+                const keywords = ["حي", "شارع", "إقامة", "زنقة", "Maarif", "Gueliz", "Agdal"];
+                for (let key of keywords) { 
+                    if (entry.toLowerCase().includes(key.toLowerCase())) { 
+                        neighborhood = key + " " + (entry.split(new RegExp(key, "i"))[1].trim().split(/[\s،,]+/)[0] || ""); 
+                        break; 
+                    } 
+                }
+                orders.push({ id: Date.now() + Math.random(), content: entry.trim(), neighborhood, phone, totalPrice: priceMatch ? parseInt(priceMatch[1]) : 0, deliveryFee: 20, status: 'pending' });
+            });
+            updateDB(); document.getElementById('raw-input').value = '';
+        }
+    </script>
+</body>
+</html>
